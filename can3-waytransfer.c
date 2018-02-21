@@ -151,99 +151,6 @@ void sigterm(int signo)
 	running = 0;
 }
 
-int idx2dindex(int ifidx, int socket) {
-
-	int i;
-	struct ifreq ifr;
-
-	for (i=0; i < MAXIFNAMES; i++) {
-		if (dindex[i] == ifidx)
-			return i;
-	}
-
-	/* create new interface index cache entry */
-
-	/* remove index cache zombies first */
-	for (i=0; i < MAXIFNAMES; i++) {
-		if (dindex[i]) {
-			ifr.ifr_ifindex = dindex[i];
-			if (ioctl(socket, SIOCGIFNAME, &ifr) < 0)
-				dindex[i] = 0;
-		}
-	}
-
-	for (i=0; i < MAXIFNAMES; i++)
-		if (!dindex[i]) /* free entry */
-			break;
-
-	if (i == MAXIFNAMES) {
-		fprintf(stderr, "Interface index cache only supports %d interfaces.\n",
-		       MAXIFNAMES);
-		exit(1);
-	}
-
-	dindex[i] = ifidx;
-
-	ifr.ifr_ifindex = ifidx;
-	if (ioctl(socket, SIOCGIFNAME, &ifr) < 0)
-		perror("SIOCGIFNAME");
-
-	if (max_devname_len < strlen(ifr.ifr_name))
-		max_devname_len = strlen(ifr.ifr_name);
-
-	strcpy(devname[i], ifr.ifr_name);
-
-#ifdef DEBUG
-	printf("new index %d (%s)\n", i, devname[i]);
-#endif
-
-	return i;
-}
-
-/* read setting-file, and parse :filename of loading file, struct of can_filter rules */
-void *file_parse(char *filename, struct can_filter_rule p[]){
-
-	FILE *fp; //file pointer
-	char buf[256];
-	char *element,*val;
-	int i=0;
-
-	/* open config-file */
-	if ((fp = fopen(filename, "r")) == NULL) {
-		perror("cannot open file");
-		printf("No filter\n");
-		//exit(1);
-	}
-
-	/* read 1row */
-	while (fgets(buf, 256, fp) != NULL) {
-		if(buf[0] == '#') continue; /* '#' is comment outed mark */
-		if(buf[0] == '\n' || buf[0] == 13){/*go to next rule (CR:13) */
-			if(p[i].can_id != 0) i++;
-			continue;	
-		} 
-
-		 printf("(i:%d)(%d)%s", i,buf[0],buf);
-		 element = strtok(buf,"=");
-
-		 val = strtok(NULL,"=");
-
-		 /*contain to struct*/
-		 if( strcmp(element,"id") == 0 ) 			p[i].can_id = strtol(val, NULL, 16);
-		 else if( strcmp(element,"pass") == 0 ) 	p[i].pass = atoi(val);
-		 else if( strcmp(element,"period") == 0 ) 	p[i].period = atoi(val);
-		 else if( strcmp(element,"start") == 0 ) 	p[i].start = atoi(val);
-		 else if( strcmp(element,"end") == 0 ) 		p[i].end = atoi(val);
-		 else if( strcmp(element,"diff") == 0 ) 	p[i].diff = atoi(val);
-
-	}//end of while
-
-	fclose(fp);
-
-	return 0;
-
-}//this is end of file_parse
-
 // 3-way add function
 #define I_CAN0 0 //I of Interface
 #define I_CAN1 1
@@ -368,16 +275,6 @@ int main(int argc, char **argv)
 			canid_filter[i_check].out_interface2 	= 0;
 	}
 
-	//test
-	/*
-	canid_filter[0].can_id = 0x0B4;
-	canid_filter[0].pass = 1;
-	canid_filter[1].can_id = 0x0AA;
-	canid_filter[1].pass = 1;
-	*/
-
-	/****************************/
-
 	signal(SIGTERM, sigterm);
 	signal(SIGHUP, sigterm);
 	signal(SIGINT, sigterm);
@@ -385,213 +282,82 @@ int main(int argc, char **argv)
 	last_tv.tv_sec  = 0;
 	last_tv.tv_usec = 0;
 
-	/* default add Option: -B */
-	
-	argv[argc++] = "can0";
-	argv[argc++] = "can1";
-	argv[argc++] = "-B";
-	argv[argc++] = "can1";
-	//argv[argc++] = "can1";
-	
-/*
-	argv[argc++] = {(const char *)"can0"};
-	argv[argc++] = {(const char *)"can1"};
-	argv[argc++] = {(const char *)"-B"};
-	argv[argc++] = {(const char *)"can1"};
-*/
-	for(i=0;i<argc;i++)	printf("%d:%s\n",i,argv[i]);
-
-	char **argv_tmp;
-	argv_tmp = argv;
-
-	while ((opt = getopt(argc, argv, "t:ciaSs:b:B:u:ldLn:r:f:Dhe?")) != -1) {
-		switch (opt) {
-
-		case 'a':
-			view |= CANLIB_VIEW_ASCII;
-			break;
-
-		case 'e':
-			view |= CANLIB_VIEW_ERROR;
-			break;
-
-		case 's':
-			silent = atoi(optarg);
-			if (silent > SILENT_ON) {
-				print_usage(basename(argv[0]));
-				exit(1);
-			}
-			break;
-
-		case 'b':
-		case 'B':
-			/* Bridge: about sending */
-			if (strlen(optarg) >= IFNAMSIZ) {
-				fprintf(stderr, "Name of CAN device '%s' is too long!\n\n", optarg);
-				return 1;
-			} else {
-				bridge = socket(PF_CAN, SOCK_RAW, CAN_RAW);
-				bridge_re = socket(PF_CAN, SOCK_RAW, CAN_RAW); /* for retransfer */
-				if (bridge < 0) {
-					perror("bridge socket");
-					return 1;
-				}
-				addr.can_family = AF_CAN;
-				addr2.can_family = AF_CAN;
-				strcpy(ifr.ifr_name, optarg);//can1
-				strcpy(ifr2.ifr_name, argv[2]);//can0 /*copy for tansfer*/
-
-				if (ioctl(bridge, SIOCGIFINDEX, &ifr) < 0)
-					perror("SIOCGIFINDEX");
-
-				addr.can_ifindex = ifr.ifr_ifindex;
-				addr2.can_ifindex = ifr2.ifr_ifindex; /*add family for transfer*/
-
-				if (!addr.can_ifindex) {
-					perror("invalid bridge interface");
-					return 1;
-				}
-
-				/* disable default receive filter on this write-only RAW socket */
-				setsockopt(bridge, SOL_CAN_RAW, CAN_RAW_FILTER, NULL, 0);
-
-				if (opt == 'B') {
-					const int loopback = 0;
-
-					setsockopt(bridge, SOL_CAN_RAW, CAN_RAW_LOOPBACK,
-						   &loopback, sizeof(loopback));
-				}
-
-				if (bind(bridge, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-					perror("bridge bind1");
-					return 1;
-				}
-
-				/*for tansfer*/
-				/*
-				if (bind(bridge_re, (struct sockaddr *)&addr2, sizeof(addr2)) < 0) {
-					perror("bridge bind2");
-					return 1;
-				}*/
-			}
-			break;
-	    
-		case 'u':
-			bridge_delay = (useconds_t)strtoul(optarg, (char **)NULL, 10);
-			break;
-
-		case 'l':
-			log = 1;
-			break;
-
-		case 'd':
-			dropmonitor = 1;
-			break;
-
-		case 'n':
-			count = atoi(optarg);
-			if (count < 1) {
-				print_usage(basename(argv[0]));
-				exit(1);
-			}
-			break;
-
-		case 'r':
-			rcvbuf_size = atoi(optarg);
-			if (rcvbuf_size < 1) {
-				print_usage(basename(argv[0]));
-				exit(1);
-			}
-			break;
-
-		/* load a config file */
-		case 'f':
-			apply_rule = 1;
-			//configfilename = optarg;
-			/*file open*/
-			//file_parse(configfilename,canid_filter);
-			//printf("TEST::%s\n",canid_mask);
-			//if(DEBUG_MODE) printf("config file:%s is opened\n",configfilename);
-			// 3-way add
-			yyin = fopen(argv[2], "r");
-			init_buf();
-			struct AbstSyntaxTree *syntax_rule = parse();
-			merge_parser2can_filter_rule(syntax_rule, canid_filter);
-			printf("syntax OK!!!!!!!!\n");
-			
-			if(DEBUG_MODE) printf("CONFIG:: CANID:%x, PASS:%d",canid_filter[0].can_id, canid_filter[0].pass);
-			break;
-
-		case 'D':
-			DEBUG_MODE=1;
-			break;
-
-		default:
-			print_usage(basename(argv[0]));
-			exit(1);
-			break;
-		}
-	}//end of optional while
-
-	if (optind == argc) {
-		print_usage(basename(argv[0]));
-		exit(0);
+	bridge = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+	bridge_re = socket(PF_CAN, SOCK_RAW, CAN_RAW); /* for retransfer */
+	if (bridge < 0) {
+		perror("bridge socket");
+		return 1;
 	}
-	
-	if (logfrmt && view) {
-		fprintf(stderr, "Log file format selected: Please disable ASCII/BINARY/SWAP options!\n");
-		exit(0);
-	}
+	addr.can_family = AF_CAN;
+	addr2.can_family = AF_CAN;
+	strcpy(ifr.ifr_name, "can0");//can1
+	strcpy(ifr2.ifr_name, "can1");//can0 /*copy for tansfer*/
 
-	if (silent == SILENT_INI) {
-		if (log) {
-			fprintf(stderr, "Disabled standard output while logging.\n");
-			silent = SILENT_ON; /* disable output on stdout */
-		} else
-			silent = SILENT_OFF; /* default output */
-	}
+	if (ioctl(bridge, SIOCGIFINDEX, &ifr) < 0)
+		perror("SIOCGIFINDEX");
 
-	currmax = argc - optind; /* find real number of CAN devices */
+	addr.can_ifindex = ifr.ifr_ifindex;
+	addr2.can_ifindex = ifr2.ifr_ifindex; /*add family for transfer*/
 
-
-	if (currmax > MAXSOCK) {
-		fprintf(stderr, "More than %d CAN devices given on commandline!\n", MAXSOCK);
+	if (!addr.can_ifindex) {
+		perror("invalid bridge interface");
 		return 1;
 	}
 
-/****************************for can2*************************/
-	/* UDP server for can2 */
+	/* disable default receive filter on this write-only RAW socket */
+	setsockopt(bridge, SOL_CAN_RAW, CAN_RAW_FILTER, NULL, 0);
+
+	if (opt == 'B') {
+		const int loopback = 0;
+
+		setsockopt(bridge, SOL_CAN_RAW, CAN_RAW_LOOPBACK,
+			   &loopback, sizeof(loopback));
+	}
+
+	if (bind(bridge, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		perror("bridge bind1");
+		return 1;
+	}
+	
+
+	apply_rule = 1;
+	// 3-way add
+	yyin = fopen(argv[1], "r");
+	init_buf();
+	struct AbstSyntaxTree *syntax_rule = parse();
+	merge_parser2can_filter_rule(syntax_rule, canid_filter);
+#ifdef DEBUG
+	printf("syntax OK\n");
+#endif
+
+	currmax = 3; /* find real number of CAN devices */
+
+	// UDP server for can2
 	struct sockaddr_in addr_eth;
 	if ((s[2] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("eth socket");
 		return 1;
 	}
-	/* bind canID and s[i] */
+	// bind canID and s[i]
 	IDcan2 = s[2];
-
 	addr_eth.sin_family = AF_INET;
 	addr_eth.sin_port = htons(4989);
 	addr_eth.sin_addr.s_addr = inet_addr("165.242.111.229");
-/*************************************************************/
 
 	for (i=0; i < currmax; i++) {
 
 		ptr = argv[optind+i];
 		nptr = strchr(ptr, ',');
 
-#ifdef DEBUG
-		printf("open %d '%s'.\n", i, ptr);
-#endif
-
 		// s[0]:can socket s[1]:can socket s[2]:ethernet socket
-		/* Create CAN socket in s[i] */
+		// Create CAN socket in s[i] 
 		s[i] = socket(PF_CAN, SOCK_RAW, CAN_RAW); //regist to bind
 		if (s[i] < 0) {
 			perror("socket");
 			return 1;
 		}
 
-		/* bind canID and s[i] */
+		/* bind IDcan and s[i] */
 		if(!IDcan0) IDcan0 = s[i];
 		else if(!IDcan1) IDcan1 = s[i];
 
@@ -614,9 +380,6 @@ int main(int argc, char **argv)
 
 		memset(&ifr.ifr_name, 0, sizeof(ifr.ifr_name));
 		strncpy(ifr.ifr_name, ptr, nbytes);
-
-		//memset(&ifr2.ifr_name, 0, sizeof(ifr2.ifr_name)); /* for transfer */
-		//strncpy(ifr2.ifr_name, argv[3], nbytes); 		  /* for transfer*/
 
 #ifdef DEBUG
 		printf("using interface name '%s'.\n", ifr.ifr_name);
@@ -718,28 +481,6 @@ int main(int argc, char **argv)
 			}
 		}
 
-		if (timestamp || log || logfrmt) {
-
-			const int timestamp_on = 1;
-
-			if (setsockopt(s[i], SOL_SOCKET, SO_TIMESTAMP,
-				       &timestamp_on, sizeof(timestamp_on)) < 0) {
-				perror("setsockopt SO_TIMESTAMP");
-				return 1;
-			}
-		}
-
-		if (dropmonitor) {
-
-			const int dropmonitor_on = 1;
-
-			if (setsockopt(s[i], SOL_SOCKET, SO_RXQ_OVFL,
-				       &dropmonitor_on, sizeof(dropmonitor_on)) < 0) {
-				perror("setsockopt SO_RXQ_OVFL not supported by your Linux Kernel");
-				return 1;
-			}
-		}
-
 		if (bind(s[i], (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 			perror("bind");
 			return 1;
@@ -755,51 +496,12 @@ int main(int argc, char **argv)
 		*/
 	}
 
-	if (log) {
-		time_t currtime;
-		struct tm now;
-		char fname[sizeof("candump-2006-11-20_202026.log")+1];
-
-		if (time(&currtime) == (time_t)-1) {
-			perror("time");
-			return 1;
-		}
-
-		localtime_r(&currtime, &now);
-
-		sprintf(fname, "candump-%04d-%02d-%02d_%02d%02d%02d.log",
-			now.tm_year + 1900,
-			now.tm_mon + 1,
-			now.tm_mday,
-			now.tm_hour,
-			now.tm_min,
-			now.tm_sec);
-
-		if (silent != SILENT_ON)
-			printf("\nWarning: console output active while logging!");
-
-		fprintf(stderr, "\nEnabling Logfile '%s'\n\n", fname);
-
-		logfile = fopen(fname, "w");
-		if (!logfile) {
-			perror("logfile");
-			return 1;
-		}
-	}
-
 	/* these settings are static and can be held out of the hot path */
 	iov.iov_base = &frame;
 	msg.msg_name = &addr;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = &ctrlmsg;
-
-	/*for dump*//*
-	iov2.iov_base = &frame2;
-	msg2.msg_name = &add2r;
-	msg2.msg_iov = &iov2;
-	msg2.msg_iovlen = 1;
-	msg2.msg_control = &ctrlmsg;*/
 
 	char INcan0_Interface_table[2][CANID_MAXIMAMNUM];
 	char INcan1_Interface_table[2][CANID_MAXIMAMNUM];
@@ -828,7 +530,7 @@ int main(int argc, char **argv)
 	 *   001|1 (pass)|1 (pass)|
 	 *   002|1 (pass)|1 (pass)|
 	 *   003|1 (pass)|1 (pass)|
-	 *	| ・・・ | ・・・ |	
+	 *	    | ・・・  |  ・・・ |	
 	 *   7FD|1 (pass)|1 (pass)|
 	 *   7FE|1 (pass)|1 (pass)|
 	 *   7FF|1 (pass)|1 (pass)|
@@ -841,7 +543,7 @@ int main(int argc, char **argv)
 	 *   001|0 (drop)|0 (drop)|
 	 *   002|0 (drop)|0 (drop)|
 	 *   003|0 (drop)|0 (drop)|
-	 *	| ・・・ | ・・・ |	
+	 *	    | ・・・  |  ・・・ |	
 	 *   7FD|0 (drop)|0 (drop)|
 	 *   7FE|0 (drop)|0 (drop)|
 	 *   7FF|0 (drop)|0 (drop)|
@@ -854,23 +556,14 @@ int main(int argc, char **argv)
 	 *   001|0 (drop)|0 (drop)|
 	 *   002|0 (drop)|0 (drop)|
 	 *   003|0 (drop)|0 (drop)|
-	 *	| ・・・ | ・・・ |	
+	 *	    | ・・・  |  ・・・ |	
 	 *   7FD|0 (drop)|0 (drop)|
 	 *   7FE|0 (drop)|0 (drop)|
 	 *   7FF|0 (drop)|0 (drop)|
 	 *
 	 */
 
-/*
-	for(i_check=0;i_check<NUMBEROF_MAXIMAMCANID;i_check++){
-			printf("ID:%d ", canid_filter[i_check].can_id); 
-			printf("PASS:%d ", canid_filter[i_check].pass);
-			printf("IN:%s ", canid_filter[i_check].in_interface);
-			printf("OUT:%s ", canid_filter[i_check].out_interface1);
-			printf("OUT:%s\n", canid_filter[i_check].out_interface2);
-	}*/
-
-	//interface filter rule create
+	//each can_interface filter rule create
 	for(i_check=0;i_check<NUMBEROF_MAXIMAMCANID;i_check++) {
 		if (canid_filter[i_check].in_interface == I_CAN0 && canid_filter[i_check].pass) {
 			if (canid_filter[i_check].can_id == 0) {
@@ -926,7 +619,7 @@ int main(int argc, char **argv)
 		masked=1;
 
 		FD_ZERO(&rdfs);
-		for (i=0; i<currmax + ThreeWAYGW_eth; i++)
+		for (i=0; i<currmax; i++)
 			FD_SET(s[i], &rdfs);
 
 		if ((ret = select(s[currmax-1]+1, &rdfs, NULL, NULL, NULL)) < 0) {
@@ -935,7 +628,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		for (i=0; i<currmax + ThreeWAYGW_eth; i++) {  /* check all CAN RAW sockets */
+		for (i=0; i<currmax; i++) {  /* check all CAN RAW sockets */
 
 			if (FD_ISSET(s[i], &rdfs)) {
 
@@ -963,193 +656,62 @@ int main(int argc, char **argv)
 					return 1;
 				}
 
-				if (count && (--count == 0))
-					running = 0;
+				//mask = 0:bridge, 1:filter
+				if(s[i] == IDcan0) {
+						//mask can_id
+						if(apply_rule) {
+								if (INcan0_Interface_table[0][frame.can_id]) can1_masked = 0;
+								if (INcan0_Interface_table[1][frame.can_id]) can2_masked = 0;
+						} else {
+							can1_masked = 0;
+							can2_masked = 0;
+						}
 
-				if (bridge) {/*transfer*/
-					if (bridge_delay)
-						usleep(bridge_delay);
+						if(can1_masked && can2_masked) break;
 
-					//mask can_id
-					//printf("(DEBUG - FRAME CHECK) ID:%x , DLC:%d, DATA[0]:%x [1]:%x [2]:%x [3]:%x [4]:%x [5]:%x [6]:%x [7]:%x\n",frame.can_id,frame.can_dlc,frame.data[0],frame.data[1],frame.data[2],frame.data[3],frame.data[4],frame.data[5],frame.data[6],frame.data[7]);
-					//if(frame.can_id == 0xAA) puts("A");
-					//for(i_check=0;i_check<NUMBEROFCANID , mask_id[i_check] != 0  ;i_check++) if(strtol(can_id, NULL, 16) == mask_id[i_check]) masked = 0;
+						if (!can1_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
+						if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
 
-					//send
-					//mask = 0:bridge, 1:filter
-					if(s[i] == IDcan0) {
-							//mask can_id
-							if(apply_rule) {
-									if (INcan0_Interface_table[0][frame.can_id]) can1_masked = 0;
-									if (INcan0_Interface_table[1][frame.can_id]) can2_masked = 0;
-							} else {
-								can1_masked = 0;
-								can2_masked = 0;
-							}
+				}
+				if(s[i] == IDcan1) {
+						//mask can_id
+						if(apply_rule) {
+								if (INcan1_Interface_table[0][frame.can_id]) can0_masked = 0;
+								if (INcan1_Interface_table[1][frame.can_id]) can2_masked = 0;
+						} else {
+							can0_masked = 0;
+							can2_masked = 0;
+						}
 
-							if(can1_masked && can2_masked) break;
+						if(can0_masked && can2_masked) break;
 
-							if (!can1_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
-							if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
+						if 		(!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
+						else if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
 
-					}
-					if(s[i] == IDcan1) {
-							//mask can_id
-							if(apply_rule) {
-									if (INcan1_Interface_table[0][frame.can_id]) can0_masked = 0;
-									if (INcan1_Interface_table[1][frame.can_id]) can2_masked = 0;
-							} else {
-								can0_masked = 0;
-								can2_masked = 0;
-							}
+				}
+				if(s[i] == IDcan2) {
+						//mask can_id
+						if(apply_rule) {
+								if (INcan2_Interface_table[0][frame.can_id]) can0_masked = 0;
+								if (INcan2_Interface_table[1][frame.can_id]) can1_masked = 0;
+						} else {
+							can0_masked = 0;
+							can1_masked = 0;
+						}
 
-							if(can0_masked && can2_masked) break;
+						if(can0_masked && can1_masked) break;
 
-							if 		(!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
-							else if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
+						if 		(!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
+						else if (!can2_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
 
-					}
-					if(s[i] == IDcan2) {
-							//mask can_id
-							if(apply_rule) {
-									if (INcan2_Interface_table[0][frame.can_id]) can0_masked = 0;
-									if (INcan2_Interface_table[1][frame.can_id]) can1_masked = 0;
-							} else {
-								can0_masked = 0;
-								can1_masked = 0;
-							}
-
-							if(can0_masked && can1_masked) break;
-
-							if 		(!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
-							else if (!can2_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
-
-							if 		(!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
-							else if (!can2_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
-					}
-
-					//continue without buffer problem? if remove below code
-					if (nbytes < 0) {
-						perror("bridge write");
-						return 1;
-					} else if (nbytes < sizeof(struct can_frame)) {
-						fprintf(stderr,"bridge write: incomplete CAN frame\n");
-						return 1;
-					}
-					//
+						if 		(!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
+						else if (!can2_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
 				}
 
 				//if(masked) break;
 				if (can0_masked && can1_masked && can2_masked);
-		    
-				for (cmsg = CMSG_FIRSTHDR(&msg);
-				     cmsg && (cmsg->cmsg_level == SOL_SOCKET);
-				     cmsg = CMSG_NXTHDR(&msg,cmsg)) {
-					if (cmsg->cmsg_type == SO_TIMESTAMP)
-						tv = *(struct timeval *)CMSG_DATA(cmsg);
-					else if (cmsg->cmsg_type == SO_RXQ_OVFL)
-						dropcnt[i] = *(__u32 *)CMSG_DATA(cmsg);
-				}
-
-				/* check for (unlikely) dropped frames on this specific socket */
-				if (dropcnt[i] != last_dropcnt[i]) {
-
-					__u32 frames;
-
-					if (dropcnt[i] > last_dropcnt[i])
-						frames = dropcnt[i] - last_dropcnt[i];
-					else
-						frames = 4294967295U - last_dropcnt[i] + dropcnt[i]; /* 4294967295U == UINT32_MAX */
-
-					if (silent != SILENT_ON)
-						printf("DROPCOUNT: dropped %d CAN frame%s on '%s' socket (total drops %d)\n",
-						       frames, (frames > 1)?"s":"", cmdlinename[i], dropcnt[i]);
-
-					if (log)
-						fprintf(logfile, "DROPCOUNT: dropped %d CAN frame%s on '%s' socket (total drops %d)\n",
-							frames, (frames > 1)?"s":"", cmdlinename[i], dropcnt[i]);
-
-					last_dropcnt[i] = dropcnt[i];
-				}
-
-				idx = idx2dindex(addr.can_ifindex, s[i]);
-
-				if (log) {
-					/* log CAN frame with absolute timestamp & device */
-					fprintf(logfile, "(%ld.%06ld) ", tv.tv_sec, tv.tv_usec);
-					fprintf(logfile, "%*s ", max_devname_len, devname[idx]);
-					/* without seperator as logfile use-case is parsing */
-					fprint_canframe(logfile, &frame, "\n", 0);
-				}
-
-				if (logfrmt) {
-					/* print CAN frame in log file style to stdout */
-					printf("(%ld.%06ld) ", tv.tv_sec, tv.tv_usec);
-					printf("%*s ", max_devname_len, devname[idx]);
-					fprint_canframe(stdout, &frame, "\n", 0);
-					goto out_fflush; /* no other output to stdout */
-				}
-
-				if (silent != SILENT_OFF){
-					if (silent == SILENT_ANI) {
-						printf("%c\b", anichar[silentani%=MAXANI]);
-						silentani++;
-					}
-					goto out_fflush; /* no other output to stdout */
-				}
-		      
-				printf(" %s", (color>2)?col_on[idx%MAXCOL]:"");
-
-				switch (timestamp) {
-
-				case 'a': /* absolute with timestamp */
-					printf("(%ld.%06ld) ", tv.tv_sec, tv.tv_usec);
-					break;
-
-				case 'A': /* absolute with date */
-				{
-					struct tm tm;
-					char timestring[25];
-
-					tm = *localtime(&tv.tv_sec);
-					strftime(timestring, 24, "%Y-%m-%d %H:%M:%S", &tm);
-					printf("(%s.%06ld) ", timestring, tv.tv_usec);
-				}
-				break;
-
-				case 'd': /* delta */
-				case 'z': /* starting with zero */
-				{
-					struct timeval diff;
-
-					if (last_tv.tv_sec == 0)   /* first init */
-						last_tv = tv;
-					diff.tv_sec  = tv.tv_sec  - last_tv.tv_sec;
-					diff.tv_usec = tv.tv_usec - last_tv.tv_usec;
-					if (diff.tv_usec < 0)
-						diff.tv_sec--, diff.tv_usec += 1000000;
-					if (diff.tv_sec < 0)
-						diff.tv_sec = diff.tv_usec = 0;
-					printf("(%03ld.%06ld) ", diff.tv_sec, diff.tv_usec);
-				
-					if (timestamp == 'd')
-						last_tv = tv; /* update for delta calculation */
-				}
-				break;
-
-				default: /* no timestamp output */
-					break;
-				}
-
-				printf(" %s", (color && (color<3))?col_on[idx%MAXCOL]:"");
-				printf("%*s", max_devname_len, devname[idx]);
-				printf("%s  ", (color==1)?col_off:"");
-				
-				if(DEBUG_MODE) printf("s[i]=%d (can0=%d, can1=%d)\n",s[i],IDcan0,IDcan1);
 				
 				fprint_long_canframe(stdout, &frame, NULL, view); /* show can-frame */
-
-				printf("%s", (color>1)?col_off:"");
 				printf("\n");
 			}
 
@@ -1165,9 +727,6 @@ int main(int argc, char **argv)
 		close(IDcan0);
 		close(IDcan1);
 	}
-
-	if (log)
-		fclose(logfile);
 
 	return 0;
 }

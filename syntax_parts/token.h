@@ -8,6 +8,7 @@
 #define DROP 7
 #define CAN_ID 8
 #define CAN_ID_NUM 9
+#define CAN_ID_NUM_RANGE 12
 #define ENDOFFILE 0
 #define SPACE 10
 #define NL 11
@@ -15,7 +16,7 @@
 // parser parts define
 struct AbstSyntaxTree{
     int PassOrDrop; //pass:1 or drop:0
-    char can_id[4]; //can id
+    char can_id[8]; //can id ex.can_id = "000-7FF"
     char apply_rule_interface[5]; //interface A pass B C A:apply_rule_interface, BorC:another_interface
     char another_interface1[5];
     char another_interface2[5];

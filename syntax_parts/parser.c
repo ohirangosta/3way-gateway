@@ -55,7 +55,7 @@ void parse_interface2(struct AbstSyntaxTree *rule) {
 	switch (m) {
 		case CAN0:
 			eat_token();
-		        strcpy(rule->another_interface2, yytext);
+		    strcpy(rule->another_interface2, yytext);
 			break;
 		case CAN1:
 			eat_token();
@@ -63,7 +63,7 @@ void parse_interface2(struct AbstSyntaxTree *rule) {
 			break;
 		case CAN2:
 			eat_token();
-		        strcpy(rule->another_interface2, yytext);
+		    strcpy(rule->another_interface2, yytext);
 			break;
 	}
 }
@@ -78,12 +78,12 @@ void parse_interface1(struct AbstSyntaxTree *rule) {
 			break;
 		case CAN1:
 			eat_token();
-		        strcpy(rule->another_interface1, yytext);
+			strcpy(rule->another_interface1, yytext);
 			parse_interface2(rule);	
 			break;
 		case CAN2:
 			eat_token();
-		        strcpy(rule->another_interface1, yytext);
+		    strcpy(rule->another_interface1, yytext);
 			parse_interface2(rule);	
 			break;
 		default:
@@ -114,7 +114,7 @@ void parse_canid(struct AbstSyntaxTree *rule) {
 	if (m == CAN_ID) {
 		eat_token();
 		m = nexttoken();
-		if (m == CAN_ID_NUM) {
+		if (m == CAN_ID_NUM||m == CAN_ID_NUM_RANGE) {
 			eat_token();
 			strcpy(rule->can_id, yytext);
 		} else {
