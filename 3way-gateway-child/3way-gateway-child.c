@@ -68,7 +68,7 @@ int attackSend_CountorTime(int *s, int *nbyte, struct can_frame frame, int attac
 int main(int argc, char **argv)
 {
 	/*argv[1]:can0, argv[2]:Data, argv[3]:Count, argv[4]:Cycle(us), argv[5]:Time(us)*/
-	int s; /* can raw socket */ 
+	int s_can; /* can raw socket */ 
 	int nbytes;
 	struct sockaddr_can addr;
 	struct can_frame frame;
@@ -81,32 +81,30 @@ int main(int argc, char **argv)
 		return 1;
 	}*/
 	
-	/*TCP connection*/
-	int sock;
-	struct sockaddr_in addr_tcp;
-	
+	int s_udp;
+	struct sockaddr_in addr_udp;
 	socklen_t sin_size = sizeof(struct sockaddr_in);
 	struct sockaddr_in from_addr;
 
 	char buf[1024];
 
-	if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+	if ((s_udp = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("socket");
 		return 1;
 	}
 
-	addr_tcp.sin_family = AF_INET;
-	addr_tcp.sin_port = htons(4989);
-	addr_tcp.sin_addr.s_addr = INADDR_ANY;
+	addr_udp.sin_family = AF_INET;
+	addr_udp.sin_port = htons(4989);
+	addr_udp.sin_addr.s_addr = INADDR_ANY;
 
-	if (bind(sock, (struct sockaddr *)&addr_tcp, sizeof(addr_tcp)) < 0) {
+	if (bind(s_udp, (struct sockaddr *)&addr_udp, sizeof(addr_udp)) < 0) {
 		perror("bind");
 		return 1;
 	}
 
 	memset(buf, 0, sizeof(buf));
 	/* open socket */
-	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+	if ((s_can = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
 		perror("socket");
 		return 1;
 	}
@@ -114,7 +112,7 @@ int main(int argc, char **argv)
 	addr.can_family = AF_CAN;
 
 	strcpy(ifr.ifr_name, "can0");
-	if (ioctl(s, SIOCGIFINDEX, &ifr) < 0) {
+	if (ioctl(s_can, SIOCGIFINDEX, &ifr) < 0) {
 		perror("SIOCGIFINDEX");
 		return 1;
 	}
@@ -122,15 +120,16 @@ int main(int argc, char **argv)
 
 	int running = 1;
 
+	printf("eth dump running\n");
 	while (running) {
-		if (recv(sock, buf, sizeof(buf), 0) < 0) {
+		printf("waiting eth packet\n");
+		if (recv(s_udp, buf, sizeof(buf), 0) < 0) {
 			perror("recv");
 			return 1;
 		}
 		printf("%s\n",buf);
 
 		/*Divide received data */
-		/* attackSend parts ************************************************
 		char *CANData, *attack_count, *attack_cycle, *attack_time, *cansendinfo[255];
 		int i = 0;
 		cansendinfo[0] = strtok(buf, ":");
@@ -142,9 +141,6 @@ int main(int argc, char **argv)
 		attack_count = cansendinfo[1];
 		attack_cycle = cansendinfo[2];
 		attack_time = cansendinfo[3];
-	***********************************************************************/
-		char *CANData;
-		CANData = buf;
 		/* parse CAN frame */
 		if (parse_canframe(CANData, &frame)){
 			fprintf(stderr, "\nWrong CAN-frame format!\n\n");
@@ -163,18 +159,18 @@ int main(int argc, char **argv)
 		/* This is obsolete as we do not read from the socket at all, but for */
 		/* this reason we can remove the receive list in the Kernel to save a */
 		/* little (really a very little!) CPU usage.                          */
-		setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, NULL, 0);
+		setsockopt(s_can, SOL_CAN_RAW, CAN_RAW_FILTER, NULL, 0);
 
-		if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		if (bind(s_can, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 			perror("bind");
 			return 1;
 		}
 		
-		attackSend_CountorTime(&s, &nbytes, frame, 1, 0 ,0);
+		attackSend_CountorTime(&s_can, &nbytes, frame, 1, 0 ,0);
 	}
 
-	close(sock);
-	close(s);
+	close(s_udp);
+	close(s_can);
 	return 0;
 }
 
