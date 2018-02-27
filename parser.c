@@ -114,9 +114,16 @@ void parse_canid(struct AbstSyntaxTree *rule) {
 	if (m == CAN_ID) {
 		eat_token();
 		m = nexttoken();
-		if (m == CAN_ID_NUM||m == CAN_ID_NUM_RANGE) {
+		if (m == CAN_ID_NUM) {
 			eat_token();
+			strcpy(rule->can_id_range_start, "800");
+			strcpy(rule->can_id_range_end, "800");
 			strcpy(rule->can_id, yytext);
+		} else if (m == CAN_ID_NUM_RANGE) {
+			eat_token();
+			strcpy(rule->can_id, "801");
+			strcpy(rule->can_id_range_start, strtok(yytext, "-"));
+			strcpy(rule->can_id_range_end, strtok(NULL, "-"));
 		} else {
 			syntax_error();
 		}
@@ -132,6 +139,7 @@ struct AbstSyntaxTree *parse() {
 		case DEFAULT_INTERFACE:
 			eat_token();
 			m = nexttoken();
+			strcpy(rule->can_id, "800");
 			if (m == CAN0 || m == CAN1 || m == CAN2) {
 					eat_token();
 					strcpy(rule->apply_rule_interface, yytext);
@@ -165,6 +173,6 @@ struct AbstSyntaxTree *parse() {
 }
 
 void print_rule(struct AbstSyntaxTree *rule) {
-	printf("pass or drop:%d, applly:%s, another1:%s, another2:%s, CAN ID:%s\n", rule->PassOrDrop, rule->apply_rule_interface, rule->another_interface1, rule->another_interface2, rule->can_id);
+	printf("pass or drop:%d, applly:%s, another1:%s, another2:%s, CAN ID:%s, CAN ID RANGE:%s - %s\n", rule->PassOrDrop, rule->apply_rule_interface, rule->another_interface1, rule->another_interface2, rule->can_id, rule->can_id_range_start, rule->can_id_range_end);
 	if (rule->next_rule != NULL) print_rule(rule->next_rule);
 }
