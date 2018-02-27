@@ -850,13 +850,7 @@ int main(int argc, char **argv)
 			}	
 		}
 	}
-	/* table print */
-	for (j = 0; j < CANID_MAXIMAMNUM; j++) {
-		printf("%d|%d|%d|\t%d|%d|%d|\t%d|%d|%d|\n", j, 
-			INcan0_Interface_table[0][j], INcan0_Interface_table[1][j], j,
-			INcan1_Interface_table[0][j], INcan1_Interface_table[1][j], j,
-			INcan2_Interface_table[0][j], INcan2_Interface_table[1][j]);
-	}
+
 	for (i = 0; i < 2; i++) {
 		for (j = 0; j < CANID_MAXIMAMNUM; j++) {
 			if (INcan0_Interface_table[i][j] == 255) INcan0_Interface_table[i][j] = 0;
@@ -865,6 +859,7 @@ int main(int argc, char **argv)
 		}
 	}
 
+#ifdef DEBUG
 	/* table print */
 	for (j = 0; j < CANID_MAXIMAMNUM; j++) {
 		printf("%d|%d|%d|\t%d|%d|%d|\t%d|%d|%d|\n", j, 
@@ -872,7 +867,7 @@ int main(int argc, char **argv)
 			INcan1_Interface_table[0][j], INcan1_Interface_table[1][j], j,
 			INcan2_Interface_table[0][j], INcan2_Interface_table[1][j]);
 	}
-
+#endif
 	//dump main
 	while (running) {
 
