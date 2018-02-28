@@ -65,6 +65,7 @@
 
 #define CAN_RECV_SOCKET 0
 #define UDP_RECV_SOCKET 1
+#define ANYDEV "any"
 
 int write_eth (int socket, struct sockaddr_in addr, struct can_frame *frame) {
 	char send_data[100];
@@ -73,7 +74,9 @@ int write_eth (int socket, struct sockaddr_in addr, struct can_frame *frame) {
 		perror("sendto_eth");
 		return -1;
 	}
+#ifdef DEBUG
 	printf("[dump CAN] %s\n", send_data);
+#endif
 	return 0;
 }
 
@@ -97,6 +100,9 @@ int main(int argc, char **argv)
 	struct iovec iov;
 	struct msghdr msg;
 	char ctrlmsg[CMSG_SPACE(sizeof(struct timeval)) + CMSG_SPACE(sizeof(__u32))];
+	int max_sock;
+	char *ptr = "can0";
+	char *nptr;
 
 	if ((s_udp_send = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("socket");
@@ -122,21 +128,31 @@ int main(int argc, char **argv)
 	memset(udp_recv_buf, 0, sizeof(udp_recv_buf));
 
 	/* open can socket */
+	nptr = strchr(ptr, ',');
 	if ((s[0] = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
 		perror("socket");
+		return 1;
+	}
+	if (nptr) nbytes = nptr -ptr;
+	else nbytes = strlen(ptr);
+
+	if (nbytes >= IFNAMSIZ) {
+		fprintf(stderr, "name of CAN device '%s' is too long!\n", ptr);
 		return 1;
 	}
 
 	addr_can.can_family = AF_CAN;
 
-	strcpy(ifr.ifr_name, "can0");
-	if (ioctl(s[0], SIOCGIFINDEX, &ifr) < 0) {
-		perror("SIOCGIFINDEX");
-		return 1;
-	}
-	addr_can.can_ifindex = ifr.ifr_ifindex;
+	memset(&ifr.ifr_name, 0, sizeof(ifr.ifr_name));
+	strncpy(ifr.ifr_name, ptr, nbytes);
+	if (strcmp(ANYDEV, ifr.ifr_name)) {
+		if (ioctl(s[0], SIOCGIFINDEX, &ifr) < 0) {
+			perror("SIOCGIFINDEX");
+			return 1;
+		}
+		addr_can.can_ifindex = ifr.ifr_ifindex;
+	} else addr_can.can_ifindex = 0;
 
-	setsockopt(s[0], SOL_CAN_RAW, CAN_RAW_FILTER, NULL, 0);
 
 	if (bind(s[0], (struct sockaddr *)&addr_can, sizeof(addr_can)) < 0) {
 		perror("bind");
@@ -148,18 +164,20 @@ int main(int argc, char **argv)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = &ctrlmsg;
+	
+	if (s[0] > s[1]) max_sock = s[0];
+	else max_sock = s[1];
 			
 	int running = 1;
-
+#ifdef DEBUG
 	printf("can and eth dump running\n");
+#endif
 	while (running) {
 		FD_ZERO(&rdfs);
 		for (i = 0; i < currmax; i++)
 			FD_SET(s[i], &rdfs);
 		
-		printf("AAAAAAAAAAAAAAAAAAAAAAAA\n");
-		select(s[currmax-1]+1, &rdfs, NULL, NULL, NULL);
-		printf("BBBBBBBBBBBBBBBBBBBBBBBB\n");
+		select(max_sock+1, &rdfs, NULL, NULL, NULL);
 		for (i = 0; i < currmax; i++) {
 			if (FD_ISSET(s[i], &rdfs)) {
 
@@ -192,7 +210,9 @@ int main(int argc, char **argv)
 					/* little (really a very little!) CPU usage.                          */
 					//attackSend_CountorTime(&s_can, &nbytes, frame, 1, 0 ,0);
 					nbytes = write(s[0], &frame, sizeof(frame));
+#ifdef DEBUG
 					printf("[dump ETH] %s\n",udp_recv_buf);
+#endif
 				}
 			}
 
@@ -203,4 +223,5 @@ int main(int argc, char **argv)
 	close(s[0]);
 	close(s[1]);
 	return 0;
+
 }
