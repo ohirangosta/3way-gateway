@@ -176,7 +176,7 @@ int interface_char2int(char *can_interface) {
 	} else if (strcmp(can_interface, "can2")==0) {
 		return I_CAN2;
 	}
-	return 0;
+	return -1;
 }
 
 /* 3-way syntax tree merge struct can_filter_rule */
@@ -189,8 +189,8 @@ int merge_parser2can_filter_rule(struct AbstSyntaxTree *syntax_rule, struct can_
 		p[i].can_id_range_start = strtol(syntax_rule->can_id_range_start, (char **)NULL, 16);
 		p[i].can_id_range_end	= strtol(syntax_rule->can_id_range_end, (char **)NULL, 16);
 		p[i].in_interface 	= interface_char2int(syntax_rule->apply_rule_interface);
-		p[i].out_interface1 	= syntax_rule->another_interface1 != "" ? interface_char2int(syntax_rule->another_interface1) : 0;
-		p[i].out_interface2 	= syntax_rule->another_interface2 != "" ? interface_char2int(syntax_rule->another_interface2) : 0;
+		p[i].out_interface1 	= syntax_rule->another_interface1 != "" ? interface_char2int(syntax_rule->another_interface1) : -1;
+		p[i].out_interface2 	= syntax_rule->another_interface2 != "" ? interface_char2int(syntax_rule->another_interface2) : -1;
 		i++;
 		syntax_rule = syntax_rule->next_rule;
 	}
@@ -291,9 +291,9 @@ int main(int argc, char **argv)
 			canid_filter[i_check].start  			= -1;
 			canid_filter[i_check].end    			= -1;
 			canid_filter[i_check].diff   			= 0;
-			canid_filter[i_check].in_interface  	= 0;
-			canid_filter[i_check].out_interface1  	= 0;
-			canid_filter[i_check].out_interface2 	= 0;
+			canid_filter[i_check].in_interface  	= -1;
+			canid_filter[i_check].out_interface1  	= -1;
+			canid_filter[i_check].out_interface2 	= -1;
 	}
 
 	signal(SIGTERM, sigterm);
