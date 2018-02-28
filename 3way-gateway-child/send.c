@@ -13,7 +13,7 @@ int main()
  addr.sin_port = htons(4989);
  addr.sin_addr.s_addr = inet_addr("169.254.19.16");
  while(1){
- 	sendto(sock, "000#0123", 8, 0, (struct sockaddr *)&addr, sizeof(addr));
+ 	sendto(sock, "001#0123", 8, 0, (struct sockaddr *)&addr, sizeof(addr));
  }
  close(sock);
 

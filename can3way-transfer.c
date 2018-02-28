@@ -273,6 +273,7 @@ int main(int argc, char **argv)
 	int can1_masked = 1;
 	int can2_masked = 1;
 	int j;
+	char can2_buf[1024];
 
 	//for filtering-rule
 	int apply_rule = 0;
@@ -339,7 +340,7 @@ int main(int argc, char **argv)
 	if (argc == 2) apply_rule = 1;
 	yyin = fopen(argv[1], "r");
 	init_buf();
-	struct AbstSyntaxTree *syntax_rule = parse();
+	struct AbstSyntaxTree *syntax_rule = (struct AbstSyntaxTree *)parse();
 	rule_counter = merge_parser2can_filter_rule(syntax_rule, canid_filter);
 #ifdef DEBUG
 	printf("syntax OK!!!!!!!!\n");
@@ -350,17 +351,33 @@ int main(int argc, char **argv)
 	currmax = 2; /* find real number of CAN devices */
 
 	/* UDP sender for can2 */
-	struct sockaddr_in addr_eth;
-	if ((s[2] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("eth socket");
+	struct sockaddr_in addr_can2_send;
+	struct sockaddr_in addr_can2_recv;
+	
+	//IDcan2 is to send for can2 message
+	if ((IDcan2 = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("can2 send socket");
 		return 1;
 	}
-	/* bind IDcan2 and s[i] */
-	IDcan2 = s[2];
 
-	addr_eth.sin_family = AF_INET;
-	addr_eth.sin_port = htons(4989);
-	addr_eth.sin_addr.s_addr = inet_addr("169.254.19.16");
+	//s[2] is to receive can2 messsage
+	if ((s[2] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("can2 receive socket");
+		return 1;
+	}
+
+	addr_can2_send.sin_family = AF_INET;
+	addr_can2_send.sin_port = htons(4989);
+	addr_can2_send.sin_addr.s_addr = inet_addr("169.254.19.16");//ip address 169.254.19.16 is 3way-transfer-child
+	
+	addr_can2_recv.sin_family = AF_INET;
+	addr_can2_recv.sin_port = htons(9894);
+	addr_can2_recv.sin_addr.s_addr = INADDR_ANY;
+
+	if (bind(s[2], (struct sockaddr *)&addr_can2_recv, sizeof(addr_can2_recv)) < 0) {
+		perror("can2 recv socket bind");
+		return 1;
+	}
 
 	for (i=0; i < currmax; i++) {
 
@@ -578,7 +595,15 @@ int main(int argc, char **argv)
 
 				if (i >= currmax) {
 					//can2 recv
-
+					nbytes = recv(s[i], can2_buf, sizeof(can2_buf), 0);
+					if(nbytes < 0) {
+						perror("can2 recv");
+						return 1;
+					}
+#ifdef DEBUG
+					printf("[can2 recv] %s\n", can2_buf);
+#endif
+					parse_canframe(can2_buf, &frame);
 				} else {
 					//can0, can1 recv
 					nbytes = recvmsg(s[i], &msg, 0); /* message receiving from s[i] <- target */
@@ -586,13 +611,11 @@ int main(int argc, char **argv)
 						perror("read");
 						return 1;
 					}
+					if (nbytes < sizeof(struct can_frame)) {
+						fprintf(stderr, "read: incomplete CAN frame\n");
+						return 1;
+					}
 				}
-
-				if (nbytes < sizeof(struct can_frame)) {
-					fprintf(stderr, "read: incomplete CAN frame\n");
-					return 1;
-				}
-
 #ifdef DEBUG
 				printf("(DEBUG - FRAME CHECK) ID:%x , DLC:%d, DATA[0]:%x [1]:%x [2]:%x [3]:%x [4]:%x [5]:%x [6]:%x [7]:%x\n",frame.can_id,frame.can_dlc,frame.data[0],frame.data[1],frame.data[2],frame.data[3],frame.data[4],frame.data[5],frame.data[6],frame.data[7]);
 #endif
@@ -610,7 +633,7 @@ int main(int argc, char **argv)
 						}
 
 						if (!can1_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
-						if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
+						if (!can2_masked) nbytes = write_eth(IDcan2, addr_can2_send, &frame);
 
 				}
 				if(s[i] == IDcan1) {
@@ -624,10 +647,10 @@ int main(int argc, char **argv)
 						}
 
 						if (!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
-						if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
+						if (!can2_masked) nbytes = write_eth(IDcan2, addr_can2_send, &frame);
 
 				}
-				if(s[i] == IDcan2) {
+				if(s[i] == s[2]) {
 						//mask can_id
 						if(apply_rule) {
 								if (INcan2_Interface_table[0][frame.can_id]) can0_masked = 0;
@@ -638,7 +661,7 @@ int main(int argc, char **argv)
 						}
 
 						if (!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
-						if (!can2_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
+						if (!can1_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
 				}
 
 				idx = idx2dindex(addr.can_ifindex, s[i]);
@@ -668,7 +691,6 @@ int main(int argc, char **argv)
 		close(IDcan0);
 		close(IDcan1);
 	}
-
 
 	return 0;
 }
