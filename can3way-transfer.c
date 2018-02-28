@@ -275,7 +275,6 @@ int main(int argc, char **argv)
 	int j;
 
 	//for filtering-rule
-	int masked = 1;
 	int apply_rule = 0;
 	int i_check;
 	int rule_counter = 0;
@@ -337,14 +336,14 @@ int main(int argc, char **argv)
 	}
 			
 	/* load a config file */
-	apply_rule = 1;
+	if (argc == 2) apply_rule = 1;
 	yyin = fopen(argv[1], "r");
 	init_buf();
 	struct AbstSyntaxTree *syntax_rule = parse();
 	rule_counter = merge_parser2can_filter_rule(syntax_rule, canid_filter);
+#ifdef DEBUG
 	printf("syntax OK!!!!!!!!\n");
 	print_rule(syntax_rule);
-#ifdef DEBUG
 	printf("[CONFIG] CANID:%x PASS:%d IN_INTERFACE:%d OUT1:%d OUT2:%d\n",canid_filter[0].can_id, canid_filter[0].pass_drop, canid_filter[0].in_interface, canid_filter[0].out_interface1, canid_filter[0].out_interface2);
 #endif
 
@@ -496,7 +495,7 @@ int main(int argc, char **argv)
 			} else {
 				//id rule
 #ifdef DEBUG
-				printf("id rule %d - %d %d\n", canid_filter[i_check].can_id_range_start, canid_filter[i_check].can_id_range_end, canid_filter[i_check].can_id);
+				printf("[can0 can_id_rule] %d - %d %d\n", canid_filter[i_check].can_id_range_start, canid_filter[i_check].can_id_range_end, canid_filter[i_check].can_id);
 #endif
 				if (canid_filter[i_check].out_interface1 == I_CAN1 || canid_filter[i_check].out_interface2 == I_CAN1) for (j = 0; j < CANID_MAXIMAMNUM; j++) if (canid_filter[i_check].can_id_range_start <= j && j <= canid_filter[i_check].can_id_range_end || j == canid_filter[i_check].can_id) INcan0_Interface_table[0][j] = canid_filter[i_check].pass_drop;
 				if (canid_filter[i_check].out_interface1 == I_CAN2 || canid_filter[i_check].out_interface2 == I_CAN2) for (j = 0; j < CANID_MAXIMAMNUM; j++) if (canid_filter[i_check].can_id_range_start <= j && j <= canid_filter[i_check].can_id_range_end || j == canid_filter[i_check].can_id) INcan0_Interface_table[1][j] = canid_filter[i_check].pass_drop;
@@ -508,6 +507,9 @@ int main(int argc, char **argv)
 				if (canid_filter[i_check].out_interface1 == I_CAN2 || canid_filter[i_check].out_interface2 == I_CAN2) for (j = 0; j < CANID_MAXIMAMNUM; j++) INcan1_Interface_table[1][j] = canid_filter[i_check].pass_drop;
 			} else {
 				//id rule
+#ifdef DEBUG
+				printf("[can1 can_id_rule] %d - %d %d\n", canid_filter[i_check].can_id_range_start, canid_filter[i_check].can_id_range_end, canid_filter[i_check].can_id);
+#endif
 				if (canid_filter[i_check].out_interface1 == I_CAN0 || canid_filter[i_check].out_interface2 == I_CAN0) for (j = 0; j < CANID_MAXIMAMNUM; j++) if (canid_filter[i_check].can_id_range_start <= j && j <= canid_filter[i_check].can_id_range_end || j == canid_filter[i_check].can_id) INcan1_Interface_table[0][j] = canid_filter[i_check].pass_drop;
 				if (canid_filter[i_check].out_interface1 == I_CAN2 || canid_filter[i_check].out_interface2 == I_CAN2) for (j = 0; j < CANID_MAXIMAMNUM; j++) if (canid_filter[i_check].can_id_range_start <= j && j <= canid_filter[i_check].can_id_range_end || j == canid_filter[i_check].can_id) INcan1_Interface_table[1][j] = canid_filter[i_check].pass_drop;
 			}
@@ -518,6 +520,9 @@ int main(int argc, char **argv)
 				if (canid_filter[i_check].out_interface1 == I_CAN1 || canid_filter[i_check].out_interface2 == I_CAN1) for (j = 0; j < CANID_MAXIMAMNUM; j++) INcan2_Interface_table[1][j] = canid_filter[i_check].pass_drop;
 			} else {
 				//id rule
+#ifdef DEBUG
+				printf("[can2 can_id_rule] %d - %d %d\n", canid_filter[i_check].can_id_range_start, canid_filter[i_check].can_id_range_end, canid_filter[i_check].can_id);
+#endif
 				if (canid_filter[i_check].out_interface1 == I_CAN0 || canid_filter[i_check].out_interface2 == I_CAN0) for (j = 0; j < CANID_MAXIMAMNUM; j++) if (canid_filter[i_check].can_id_range_start <= j && j <= canid_filter[i_check].can_id_range_end || j == canid_filter[i_check].can_id) INcan2_Interface_table[0][j] = canid_filter[i_check].pass_drop;
 				if (canid_filter[i_check].out_interface1 == I_CAN1 || canid_filter[i_check].out_interface2 == I_CAN1) for (j = 0; j < CANID_MAXIMAMNUM; j++) if (canid_filter[i_check].can_id_range_start <= j && j <= canid_filter[i_check].can_id_range_end || j == canid_filter[i_check].can_id) INcan2_Interface_table[1][j] = canid_filter[i_check].pass_drop;
 			}	
@@ -545,7 +550,6 @@ int main(int argc, char **argv)
 	//dump main
 	while (running) {
 
-		masked=1;
 		can0_masked = 1;
 		can1_masked = 1;
 		can2_masked = 1;
@@ -576,6 +580,7 @@ int main(int argc, char **argv)
 					//can2 recv
 
 				} else {
+					//can0, can1 recv
 					nbytes = recvmsg(s[i], &msg, 0); /* message receiving from s[i] <- target */
 					if (nbytes < 0) {
 						perror("read");
@@ -588,77 +593,56 @@ int main(int argc, char **argv)
 					return 1;
 				}
 
-				if (count && (--count == 0))
-					running = 0;
-
-				if (bridge) {/*transfer*/
-					if (bridge_delay)
-						usleep(bridge_delay);
-
-					
 #ifdef DEBUG
-					printf("(DEBUG - FRAME CHECK) ID:%x , DLC:%d, DATA[0]:%x [1]:%x [2]:%x [3]:%x [4]:%x [5]:%x [6]:%x [7]:%x\n",frame.can_id,frame.can_dlc,frame.data[0],frame.data[1],frame.data[2],frame.data[3],frame.data[4],frame.data[5],frame.data[6],frame.data[7]);
+				printf("(DEBUG - FRAME CHECK) ID:%x , DLC:%d, DATA[0]:%x [1]:%x [2]:%x [3]:%x [4]:%x [5]:%x [6]:%x [7]:%x\n",frame.can_id,frame.can_dlc,frame.data[0],frame.data[1],frame.data[2],frame.data[3],frame.data[4],frame.data[5],frame.data[6],frame.data[7]);
 #endif
-					//mask can_id
-					//send
-					//mask = 0:bridge, 1:filter
-					if(s[i] == IDcan0) {
-							//mask can_id
-							if(apply_rule) {
-									if (INcan0_Interface_table[0][frame.can_id]) can1_masked = 0;
-									if (INcan0_Interface_table[1][frame.can_id]) can2_masked = 0;
-							} else {
-								can1_masked = 0;
-								can2_masked = 0;
-							}
+				//mask can_id
+				//send
+				//mask = 0:bridge, 1:filter
+				if(s[i] == IDcan0) {
+						//mask can_id
+						if(apply_rule) {
+								if (INcan0_Interface_table[0][frame.can_id]) can1_masked = 0;
+								if (INcan0_Interface_table[1][frame.can_id]) can2_masked = 0;
+						} else {
+							can1_masked = 0;
+							can2_masked = 0;
+						}
 
-							if (!can1_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
-							if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
+						if (!can1_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
+						if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
 
-					}
-					if(s[i] == IDcan1) {
-							//mask can_id
-							if(apply_rule) {
-									if (INcan1_Interface_table[0][frame.can_id]) can0_masked = 0;
-									if (INcan1_Interface_table[1][frame.can_id]) can2_masked = 0;
-							} else {
-								can0_masked = 0;
-								can2_masked = 0;
-							}
+				}
+				if(s[i] == IDcan1) {
+						//mask can_id
+						if(apply_rule) {
+								if (INcan1_Interface_table[0][frame.can_id]) can0_masked = 0;
+								if (INcan1_Interface_table[1][frame.can_id]) can2_masked = 0;
+						} else {
+							can0_masked = 0;
+							can2_masked = 0;
+						}
 
-							if (!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
-							if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
+						if (!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
+						if (!can2_masked) nbytes = write_eth(IDcan2, addr_eth, &frame);
 
-					}
-					if(s[i] == IDcan2) {
-							//mask can_id
-							if(apply_rule) {
-									if (INcan2_Interface_table[0][frame.can_id]) can0_masked = 0;
-									if (INcan2_Interface_table[1][frame.can_id]) can1_masked = 0;
-							} else {
-								can0_masked = 0;
-								can1_masked = 0;
-							}
+				}
+				if(s[i] == IDcan2) {
+						//mask can_id
+						if(apply_rule) {
+								if (INcan2_Interface_table[0][frame.can_id]) can0_masked = 0;
+								if (INcan2_Interface_table[1][frame.can_id]) can1_masked = 0;
+						} else {
+							can0_masked = 0;
+							can1_masked = 0;
+						}
 
-							if (!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
-							if (!can2_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
-					}
-
-					//continue without buffer problem? if remove below code
-					/*if (nbytes < 0) {
-						perror("bridge write");
-						return 1;
-					} else if (nbytes < sizeof(struct can_frame)) {
-						fprintf(stderr,"bridge write: incomplete CAN frame\n");
-						return 1;
-					}*/
+						if (!can0_masked) nbytes = write(IDcan0, &frame, sizeof(struct can_frame));
+						if (!can2_masked) nbytes = write(IDcan1, &frame, sizeof(struct can_frame));
 				}
 
-				//if(masked) break;
-				//if (can0_masked && can1_masked && can2_masked);
-
 				idx = idx2dindex(addr.can_ifindex, s[i]);
-		      
+#ifdef DEBUG
 				printf(" %s", (color>2)?col_on[idx%MAXCOL]:"");
 
 				printf(" %s", (color && (color<3))?col_on[idx%MAXCOL]:"");
@@ -669,6 +653,7 @@ int main(int argc, char **argv)
 
 				printf("%s", (color>1)?col_off:"");
 				printf("\n");
+#endif
 			}
 
 		out_fflush:
