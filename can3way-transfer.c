@@ -345,7 +345,7 @@ int main(int argc, char **argv)
 	printf("syntax OK!!!!!!!!\n");
 	print_rule(syntax_rule);
 #ifdef DEBUG
-	printf("[CONFIG] CANID:%x PASS:%d IN_INTERFACE:%d OUT1:%d OUT2:%d\n",canid_filter[0].can_id, canid_filter[0].pass, canid_filter[0].in_interface, canid_filter[0].out_interface1, canid_filter[0].out_interface2);
+	printf("[CONFIG] CANID:%x PASS:%d IN_INTERFACE:%d OUT1:%d OUT2:%d\n",canid_filter[0].can_id, canid_filter[0].pass_drop, canid_filter[0].in_interface, canid_filter[0].out_interface1, canid_filter[0].out_interface2);
 #endif
 
 	currmax = 2; /* find real number of CAN devices */
