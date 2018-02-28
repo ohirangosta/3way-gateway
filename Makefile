@@ -24,4 +24,4 @@ $(TARGET):$(OBJ)
 clean: clean-this
 
 clean-this:
-	/bin/rm	-f $(TARGET) $(OBJ) *~
+	/bin/rm	-f can3way-transfer $(TARGET) $(OBJ) *~
