@@ -14,23 +14,23 @@
 3way-gateway  
 ┣━ 3way-gateway-child  
 ┃	┣━ build_child.sh  
-┃	┣━ can3way-gateway-child
-┃	┣━ lib.c
-┃	┗━ lib.h
-┣━ config_example
-┃	┣━ example1.conf
-┃	┣━ example2.conf
-┃	┣━ example2.conf
-┃	┗━ test.conf
-┣━ Makefile
-┣━ build.sh
-┣━ can3way-transfer.c
-┣━ lexer.l
-┣━ lib.c
-┣━ lib.h
-┣━ parse.c
-┣━ terminal.h
-┗━ token.h
+┃	┣━ can3way-gateway-child  
+┃	┣━ lib.c  
+┃	┗━ lib.h  
+┣━ config_example  
+┃	┣━ example1.conf  
+┃	┣━ example2.conf  
+┃	┣━ example2.conf  
+┃	┗━ test.conf  
+┣━ Makefile  
+┣━ build.sh  
+┣━ can3way-transfer.c  
+┣━ lexer.l  
+┣━ lib.c  
+┣━ lib.h  
+┣━ parse.c  
+┣━ terminal.h  
+┗━ token.h  
 
 ## Requirement
 
