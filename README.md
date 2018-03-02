@@ -56,4 +56,4 @@ $ ./build.sh release
 
 ## Author
 
-[tcnksm](https://github.com/ohirangosta)
+[rangosta](https://github.com/ohirangosta)
